@@ -1,0 +1,40 @@
+body {
+  font-family: Arial, sans-serif;
+  background: #0f0f0f;
+  color: #ffffff;
+  text-align: center;
+  padding: 20px;
+}
+
+header,
+footer {
+  margin-bottom: 20px;
+}
+
+h1 {
+  color: #1584fa;
+}
+
+button {
+  padding: 10px 20px;
+  background: #1584fa;
+  border: none;
+  color: white;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #0b296f;
+}
+
+section {
+  margin: 20px auto;
+  max-width: 600px;
+  background: #1a1a1a;
+  padding: 20px;
+  border-radius: 10px;
+}
+
+canvas {
+  background: white;
+}
