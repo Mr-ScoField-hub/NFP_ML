@@ -1,35 +1,53 @@
-import yfinance as yf
 import pandas as pd
+import yfinance as yf
 
-# Load NFP Data
-nfp_df = pd.read_csv("../data/nfp_data.csv")
+def prepare_nfp_dataset():
+    # Load employment data
+    emp = pd.read_csv("../data/employment.csv", parse_dates=["observation_date"])
+    emp.rename(columns={"observation_date": "Date", "PAYEMS": "Employment"}, inplace=True)
 
-# Clean NFP Data
-nfp_df.columns = nfp_df.columns.str.strip()  # Remove extra spaces
-nfp_df["Date"] = pd.to_datetime(nfp_df["Date"])
+    # Fetch EUR/USD data
+    start_date = emp['Date'].min()
+    end_date = emp['Date'].max()
 
-# Keep only necessary columns
-nfp_df = nfp_df[["Date", "Actual", "Forecast", "Previous"]]
+    eurusd = yf.download('EURUSD=X', start=start_date, end=end_date, interval='1mo')
 
-# Fetch EUR/USD hourly price data from 2019 to 2024
-forex_df = yf.download('EURUSD=X', start='2019-01-01', end='2024-06-29', interval='1h')
+    # Flatten MultiIndex columns if necessary
+    if isinstance(eurusd.columns, pd.MultiIndex):
+        eurusd.columns = eurusd.columns.get_level_values(0)
 
-# Reset index to have DateTime as a column
-forex_df.reset_index(inplace=True)
+    print("\n✅ Downloaded EUR/USD data columns:", eurusd.columns)
+    print(eurusd.head())
 
-# Clean price data
-forex_df["Datetime"] = pd.to_datetime(forex_df["Datetime"])
+    # Select relevant price column
+    if 'Adj Close' in eurusd.columns:
+        eurusd_monthly = eurusd[['Adj Close']].reset_index()
+        eurusd_monthly.rename(columns={'Adj Close': 'Close'}, inplace=True)
+    elif 'Close' in eurusd.columns:
+        eurusd_monthly = eurusd[['Close']].reset_index()
+    else:
+        print("❌ No 'Close' or 'Adj Close' column found.")
+        return
 
-# Extract NFP event dates (we'll match prices on NFP release times: 14:30 SAST / 12:30 UTC)
-nfp_times = nfp_df["Date"] + pd.Timedelta(hours=12, minutes=30)
+    # Merge on Date
+    df = pd.merge(emp, eurusd_monthly, on='Date', how='inner')
 
-# Filter Forex prices within ±12 hours of each NFP event
-forex_events = forex_df[forex_df["Datetime"].isin(nfp_times)]
+    # Calculate percentage changes
+    df['Emp_Pct_Change'] = df['Employment'].pct_change()
+    df['Price_Pct_Change'] = df['Close'].pct_change()
 
-# Merge data (later you can extend to add price movement before/after)
-merged_df = pd.merge(nfp_df, forex_events, left_on="Date", right_on=forex_events["Datetime"].dt.date)
+    # Create target: 1 if next month’s price goes up, else 0
+    df['Target'] = (df['Price_Pct_Change'].shift(-1) > 0).astype(int)
 
-# Save cleaned merged data
-merged_df.to_csv("data/merged_nfp_forex.csv", index=False)
+    # Drop NaN rows from pct_change and shift
+    df_clean = df.dropna().reset_index(drop=True)
 
-print(" Cleaned NFP and Forex data saved to data/merged_nfp_forex.csv")
+    print("\n Prepared dataset preview:")
+    print(df_clean.head())
+
+    # Save cleaned dataset
+    df_clean.to_csv("../data/prepared_nfp_dataset.csv", index=False)
+    print("\n Dataset saved as '../data/prepared_nfp_dataset.csv'")
+
+if __name__ == "__main__":
+    prepare_nfp_dataset()
